@@ -1,0 +1,588 @@
+<!doctype html>
+<html lang="ro">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Calisthenics Online — Edit Exercises</title>
+<style>
+:root{ --bg:#eef3ff; --card:#fff; --text:#000; --accent:#4caf50; }
+.dark{--bg:#121212;--card:#1e1e1e;--text:#fff;}
+body{margin:0;font-family:Arial,system-ui,-apple-system;background:var(--bg);color:var(--text);}
+header{background:var(--accent);color:white;padding:20px;text-align:center;}
+nav{display:flex;justify-content:space-between;align-items:center;padding:10px;background:var(--card);}
+button{padding:8px 12px;border:none;border-radius:10px;cursor:pointer;margin:2px;background:transparent;}
+button:focus{outline:3px solid #ffeb3b88; outline-offset:2px;}
+button.active{background:var(--accent);color:white;}
+.container{max-width:980px;margin:auto;padding:20px;}
+.card{background:var(--card);border-radius:15px;padding:20px;margin-bottom:20px;box-shadow:0 8px 20px rgba(0,0,0,0.08);}
+.exercise{display:flex;gap:15px;margin-bottom:12px;align-items:flex-start;}
+.exercise video, .exercise img{width:260px;border-radius:10px;background:#ddd;display:block;}
+.locked{opacity:.4;pointer-events:none;}
+.hidden{display:none;}
+figure{margin:0;}
+figcaption{font-size:0.95rem;margin-top:0.25rem;color:var(--text);}
+footer{text-align:center;padding:15px;color:#777;}
+.status-row{display:flex;gap:10px;align-items:center;flex-wrap:wrap;}
+.small-muted{color:#666;font-size:.9rem;}
+.complete-btn{background:var(--accent);color:#fff;border-radius:10px;padding:8px 12px;cursor:pointer;}
+.complete-btn[disabled]{opacity:.6;cursor:not-allowed;}
+.label{display:block;margin:6px 0;font-weight:600;}
+.input{width:100%;padding:8px;border-radius:8px;border:1px solid #ccc;}
+.note{font-size:.9rem;color:#555;margin-top:8px;}
+.media-list{display:flex;flex-direction:column;gap:6px;margin-top:8px;}
+.media-item{padding:8px;border-radius:8px;background:#f7f9ff;border:1px solid #e2e8f0;}
+.edit-form{margin-top:8px;padding:10px;border-radius:8px;background:#fbfdff;border:1px solid #e6f0ff;}
+.row{display:flex;gap:8px;align-items:center;}
+.small{font-size:.85rem;color:#666;}
+.badge{display:inline-block;padding:3px 8px;border-radius:999px;background:#eef4ff;color:#0b59a3;font-size:.8rem;}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>🔥 Calisthenics By Petyscan Mafia</h1>
+  <p>Forță • Skill-uri • Progres</p>
+</header>
+
+<nav aria-label="Navigare principală">
+  <div role="tablist" aria-label="Secțiuni">
+    <button id="btnDays" class="active" data-target="days" type="button">📅 Zile</button>
+    <button id="btnSkills" data-target="skills" type="button">⭐ Skill-uri</button>
+    <button id="btnStats" data-target="stats" type="button">📊 Statistici</button>
+  </div>
+  <div>
+    <button id="btnTheme" aria-pressed="false" title="Comută temă">🌙 / ☀</button>
+  </div>
+</nav>
+
+<main class="container">
+  <section id="days" class="card" aria-labelledby="daysTitle" role="region">
+    <h2 id="daysTitle">📅 Program zile — Editează exercițiile</h2>
+    <div id="daysList" aria-live="polite"></div>
+  </section>
+
+  <section id="skills" class="card hidden" aria-labelledby="skillsTitle" role="region">
+    <h2 id="skillsTitle">⭐ Skill-uri</h2> — Editează exercițiile</h2>
+    <div id="skillsList" aria-live="polite"></div>
+  </section>
+
+  <section id="stats" class="card hidden" aria-labelledby="statsTitle" role="region">
+    <h2 id="statsTitle">📊 Statistici</h2>
+    <p>Zile completate: <b id="doneDays"></b></p>
+    <p>Streak curent: <b id="streak"></b> 🔥</p>
+    <p>Cel mai bun streak: <b id="bestStreak"></b></p>
+  </section>
+
+  <section class="card" role="region" aria-labelledby="coachTitle">
+    <h2 id="coachTitle">🤖 AI Coach</h2>
+    <p id="coach" aria-live="polite"></p>
+  </section>
+
+  <!-- Media manager global (push-up fallback) -->
+  <section class="card" aria-labelledby="mediaTitle" role="region">
+    <h2 id="mediaTitle">🎬 Media — Push-up (global / fallback)</h2>
+
+    <label class="label" for="pushupUrl">Adaugă URL push-up (persistă; folosit doar ca fallback)</label>
+    <input id="pushupUrl" class="input" type="url" placeholder="/videos/pushup.mp4 sau https://.../pushup.mp4">
+    <div style="margin-top:8px">
+      <button id="btnAddPushupUrl" type="button">Adaugă URL push-up</button>
+      <button id="btnClearPushupUrl" type="button">Șterge URL salvat</button>
+    </div>
+
+    <p class="note">Poți edita fiecare exercițiu pe zi individual — aici e doar fallback global pentru push-up.</p>
+    <div id="mediaStatus" class="media-list" aria-live="polite"></div>
+  </section>
+
+</main>
+
+<footer>💪 Consistență zilnică</footer>
+
+<script>
+/* =========================
+   Persistență / Inițial
+   ========================= */
+const STORAGE_KEY = "calisData:v2";
+let data = JSON.parse(localStorage.getItem(STORAGE_KEY)) || {
+  unlockedDay: 1,
+  unlockedSkill: 1,
+  streak: 0,
+  best: 0,
+  lastDay: null,
+  theme: "light",
+  media: { pushupUrl: null },
+  days: null // vom popula dacă nul
+};
+// temporar: obiect pentru previzualizări locale per-exercițiu: key = `${dayIndex}-${exIndex}`
+const localPreview = {}; // nu persistă între refresh-uri
+
+// default exercises generator
+function defaultExerciseFor(day, idx){
+  if(idx===0) return { label: `Flotări ${10 + day}, corp drept`, src: data.media.pushupUrl || "https://media1.giphy.com/media/v1.Y2lkPTc5MGI3NjExMWlyaWF2aDBodDkxZzRpdmk1bm9qcDRrZ2NqZWcwNTl2MWdwZGhiOSZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/3ohze1qkqPZHMrEuwo/giphy.gif" };
+  if(idx===1) return { label: `Diamond ${5 + day}, triceps focus`, src: "https://media2.giphy.com/media/v1.Y2lkPTc5MGI3NjExbDNud242c2tvZmE2czFmdXRtdmd4cmJqZ2I3cHJneHhsNG9mN3NoYSZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/4XGl3yPyvnWCFfTaYV/giphy.gif" };
+  return { label: `Pike ${5 + Math.floor(day / 2)}, șold sus`, src: "https://media4.giphy.com/media/v1.Y2lkPTc5MGI3NjExMHBzMnk1ZnI5czJrNm1mNXdvazVpbHNhc2ppazJmbHZlbmJzcTdycCZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/EBluiNdrfnAoSXCV4r/giphy.gif" };
+}
+
+if (!data.days || !Array.isArray(data.days) || data.days.length !== 30) {
+  data.days = [];
+  for (let d = 1; d <= 30; d++) {
+    data.days.push({
+      exercises: [0,1,2].map((_,i) => defaultExerciseFor(d,i))
+    });
+  }
+}
+
+if (data.theme === "dark") document.body.classList.add("dark");
+
+/* =========================
+   Config skilluri (nemodificat)
+   ========================= */
+const skills = [
+  { name: "L-Sit", unlock: 1, video: "https://media3.giphy.com/media/v1.Y2lkPTc5MGI3NjExcnUwZXEzem1nNWZhOHRxdjhmaTllb3A0emxhcHpndWFyaTYzd3Q4ciZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/9sr6qL7PYoRxddfybX/giphy.gif" },
+  { name: "Handstand", unlock: 2, video: "videos/handstand.mp4" },
+  { name: "Front Lever", unlock: 3, video: "videos/frontlever.mp4" },
+  { name: "Back Lever", unlock: 4, video: "videos/backlever.mp4" },
+  { name: "Planche Lean", unlock: 5, video: "videos/planche.mp4" }
+];
+
+/* =========================
+   Utilitare
+   ========================= */
+const todayStr = () => new Date().toDateString();
+const yesterdayStr = () => new Date(Date.now() - 86400000).toDateString();
+
+function save() {
+  data.unlockedDay = Math.min(Math.max(1, data.unlockedDay), 30);
+  data.unlockedSkill = Math.min(Math.max(1, data.unlockedSkill), skills.length);
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+}
+
+function svgDataURL(label) {
+  const svg = `<svg xmlns='http://www.w3.org/2000/svg' width='320' height='180'>
+    <rect width='100%' height='100%' fill='#e3f2fd'/>
+    <text x='50%' y='50%' dominant-baseline='middle' text-anchor='middle' fill='#1976d2' font-size='16' font-family='Arial'>${label}</text>
+  </svg>`;
+  return 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
+}
+
+/* =========================
+   Lazy loader pentru video
+   ========================= */
+const io = new IntersectionObserver((entries) => {
+  entries.forEach(entry => {
+    if (entry.isIntersecting) {
+      const el = entry.target;
+      const src = el.dataset.src;
+      if (src && !el.src && el.tagName.toLowerCase()==='video') {
+        el.src = src;
+      }
+      io.unobserve(el);
+    }
+  });
+}, { rootMargin: "300px 0px" });
+
+/* =========================
+   Helper: get source (local preview -> saved -> fallback)
+   ========================= */
+function getExerciseSource(dayIndex, exIndex) {
+  const key = `${dayIndex}-${exIndex}`;
+  if (localPreview[key]) return localPreview[key];
+  const ex = (data.days[dayIndex] && data.days[dayIndex].exercises[exIndex]) || null;
+  if (ex && ex.src) return ex.src;
+  // fallback defaults if somehow missing
+  return defaultExerciseFor(dayIndex+1, exIndex).src;
+}
+
+function isGif(src){
+  return typeof src === 'string' && src.trim().toLowerCase().match(/\.gif(\?.*)?$/);
+}
+
+/* =========================
+   Render Zile cu edit per exercițiu
+   ========================= */
+const daysList = document.getElementById("daysList");
+function renderDays() {
+  daysList.innerHTML = "";
+  for (let d = 1; d <= 30; d++) {
+    const dayIndex = d - 1;
+    const locked = d > data.unlockedDay;
+    const dayEl = document.createElement("article");
+    dayEl.className = locked ? "day locked card" : "day card";
+    dayEl.setAttribute("aria-labelledby", `day-${d}-title`);
+    if (locked) dayEl.setAttribute("aria-disabled", "true");
+
+    const h = document.createElement("h3");
+    h.id = `day-${d}-title`;
+    h.textContent = `Ziua ${d} `;
+    const badge = document.createElement("span");
+    badge.className = "badge";
+    badge.textContent = `#${d}`;
+    h.appendChild(document.createTextNode(" "));
+    h.appendChild(badge);
+    dayEl.appendChild(h);
+
+    const exs = data.days[dayIndex].exercises;
+    exs.forEach((ex, i) => {
+      const fig = document.createElement("figure");
+      fig.className = "exercise";
+
+      const src = getExerciseSource(dayIndex, i);
+      const mediaWrapper = document.createElement("div");
+      mediaWrapper.style.minWidth = "260px";
+
+      if (isGif(src)) {
+        const img = document.createElement("img");
+        img.src = src;
+        img.alt = ex.label || `Exercițiu ${i+1} ziua ${d}`;
+        img.loading = "lazy";
+        img.style.width = "100%";
+        mediaWrapper.appendChild(img);
+      } else {
+        const video = document.createElement("video");
+        video.setAttribute("controls", "");
+        video.setAttribute("preload", "metadata");
+        video.dataset.src = src;
+        video.poster = svgDataURL(`${ex.label || 'Exercițiu'}`);
+        video.setAttribute("aria-label", ex.label || `Exercițiu ${i+1}`);
+        mediaWrapper.appendChild(video);
+        io.observe(video);
+      }
+
+      fig.appendChild(mediaWrapper);
+
+      const meta = document.createElement("div");
+      meta.style.flex = "1";
+
+      const cap = document.createElement("figcaption");
+      cap.className = "how";
+      cap.textContent = ex.label || `Exercițiu ${i+1}`;
+      meta.appendChild(cap);
+
+      // butoane: Editează
+      const actions = document.createElement("div");
+      actions.className = "status-row";
+
+      const editBtn = document.createElement("button");
+      editBtn.type = "button";
+      editBtn.textContent = "✏️ Editează";
+      editBtn.addEventListener("click", () => toggleEditForm(dayIndex, i, editBtn));
+      actions.appendChild(editBtn);
+
+      // arată sursa curentă
+      const srcSpan = document.createElement("div");
+      srcSpan.className = "small muted";
+      srcSpan.style.marginTop = "6px";
+      srcSpan.textContent = `Sursă: ${getExerciseSource(dayIndex,i)}`;
+      meta.appendChild(actions);
+      meta.appendChild(srcSpan);
+
+      // container pentru formularul de edit (vor fi inserate aici)
+      const editContainer = document.createElement("div");
+      editContainer.className = "edit-container";
+      meta.appendChild(editContainer);
+
+      fig.appendChild(meta);
+      dayEl.appendChild(fig);
+    });
+
+    // buton completare zi (dacă nu e blocată)
+    const actionRow = document.createElement("div");
+    actionRow.className = "status-row";
+    if (!locked) {
+      const completeBtn = document.createElement("button");
+      completeBtn.className = "complete-btn";
+      completeBtn.type = "button";
+      completeBtn.textContent = data.lastDay === todayStr() ? "✔ Zi completată" : "✔ Marchează ca făcută";
+      completeBtn.disabled = data.lastDay === todayStr();
+      completeBtn.addEventListener("click", () => completeDay());
+      actionRow.appendChild(completeBtn);
+    } else {
+      const lockedNotice = document.createElement("span");
+      lockedNotice.className = "small-muted";
+      lockedNotice.textContent = "🔒 Deblochează făcând zilele anterioare";
+      actionRow.appendChild(lockedNotice);
+    }
+
+    dayEl.appendChild(actionRow);
+    daysList.appendChild(dayEl);
+  }
+}
+
+/* =========================
+   Toggle / Render edit form per exercițiu
+   ========================= */
+function toggleEditForm(dayIndex, exIndex, triggerBtn) {
+  const container = triggerBtn.closest("figure").querySelector(".edit-container");
+  if (!container) return;
+  if (container.dataset.open === "1") {
+    container.innerHTML = "";
+    container.dataset.open = "0";
+    triggerBtn.textContent = "✏️ Editează";
+    return;
+  }
+  // creează formular
+  container.dataset.open = "1";
+  container.innerHTML = "";
+  triggerBtn.textContent = "❌ Închide";
+
+  const form = document.createElement("div");
+  form.className = "edit-form";
+
+  const ex = data.days[dayIndex].skillsList[exIndex];
+
+  // label
+  const lblLabel = document.createElement("label");
+  lblLabel.className = "label";
+  lblLabel.textContent = "Etichetă (label)";
+  const inputLabel = document.createElement("input");
+  inputLabel.className = "input";
+  inputLabel.value = ex.label || "";
+  form.appendChild(lblLabel); form.appendChild(inputLabel);
+
+  // URL
+  const lblUrl = document.createElement("label");
+  lblUrl.className = "label";
+  lblUrl.textContent = "URL video / GIF";
+  const inputUrl = document.createElement("input");
+  inputUrl.className = "input";
+  inputUrl.type = "url";
+  inputUrl.placeholder = "https://media1.giphy.com/media/v1.Y2lkPTc5MGI3NjExMWlyaWF2aDBodDkxZzRpdmk1bm9qcDRrZ2NqZWcwNTl2MWdwZGhiOSZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/3ohze1qkqPZHMrEuwo/giphy.gif";
+  inputUrl.value = ex.src || "";
+  form.appendChild(lblUrl); form.appendChild(inputUrl);
+
+  // file upload local preview
+  const lblFile = document.createElement("label");
+  lblFile.className = "label";
+  lblFile.textContent = "Încarcă fișier local pentru previzualizare (temporar)";
+  const inputFile = document.createElement("input");
+  inputFile.type = "file";
+  inputFile.accept = "video/*,image/gif";
+  inputFile.className = "input";
+  form.appendChild(lblFile); form.appendChild(inputFile);
+
+  // butoane
+  const btnRow = document.createElement("div");
+  btnRow.style.marginTop = "8px";
+
+  const saveBtn = document.createElement("button");
+  saveBtn.type = "button";
+  saveBtn.textContent = "💾 Salvează";
+  saveBtn.addEventListener("click", () => {
+    // aplică schimbările: label, url (dacă completat), și păstrează src dacă nu s-a introdus nimic
+    ex.label = inputLabel.value.trim() || ex.label;
+    const urlVal = inputUrl.value.trim();
+    if (urlVal) ex.src = urlVal;
+    // if file uploaded, create objectURL and set localPreview, but do NOT persist file data
+    const f = inputFile.files && inputFile.files[0];
+    const key = `${dayIndex}-${exIndex}`;
+    if (f) {
+      // revocă vechiul preview dacă există
+      if (localPreview[key]) URL.revokeObjectURL(localPreview[key]);
+      localPreview[key] = URL.createObjectURL(f);
+    }
+    save();
+    // re-render (close form)
+    container.dataset.open = "0";
+    container.innerHTML = "";
+    triggerBtn.textContent = "✏️ Editează";
+    renderAll();
+  });
+  btnRow.appendChild(saveBtn);
+
+  const cancelBtn = document.createElement("button");
+  cancelBtn.type = "button";
+  cancelBtn.textContent = "Anulează";
+  cancelBtn.addEventListener("click", () => {
+    container.dataset.open = "0";
+    container.innerHTML = "";
+    triggerBtn.textContent = "✏️ Editează";
+  });
+  btnRow.appendChild(cancelBtn);
+
+  const clearLocalBtn = document.createElement("button");
+  clearLocalBtn.type = "button";
+  clearLocalBtn.textContent = "Șterge previz. local";
+  clearLocalBtn.addEventListener("click", () => {
+    const key = `${dayIndex}-${exIndex}`;
+    if (localPreview[key]) {
+      URL.revokeObjectURL(localPreview[key]);
+      delete localPreview[key];
+      renderAll();
+    }
+  });
+  btnRow.appendChild(clearLocalBtn);
+
+  // buton restore default pentru exercițiu
+  const restoreBtn = document.createElement("button");
+  restoreBtn.type = "button";
+  restoreBtn.textContent = "Restore default";
+  restoreBtn.addEventListener("click", () => {
+    if (!confirm("Vrei să restaurezi exercițiul la valorile implicite?")) return;
+    data.days[dayIndex].exercises[exIndex] = defaultExerciseFor(dayIndex+1, exIndex);
+    const key = `${dayIndex}-${exIndex}`;
+    if (localPreview[key]) { URL.revokeObjectURL(localPreview[key]); delete localPreview[key]; }
+    save(); renderAll();
+  });
+  btnRow.appendChild(restoreBtn);
+
+  form.appendChild(btnRow);
+  container.appendChild(form);
+}
+
+/* =========================
+   Complete Day
+   ========================= */
+function completeDay() {
+  if (data.lastDay === todayStr()) return;
+  data.streak = data.lastDay === yesterdayStr() ? data.streak + 1 : 1;
+  data.best = Math.max(data.best, data.streak);
+  data.lastDay = todayStr();
+  data.unlockedDay = Math.min(data.unlockedDay + 1, 30);
+  if ((data.unlockedDay - 1) % 5 === 0) {
+    data.unlockedSkill = Math.min(data.unlockedSkill + 1, skills.length);
+  }
+  save();
+  renderAll();
+}
+
+/* =========================
+   Render Skills
+   ========================= */
+const skillsList = document.getElementById("skillsList");
+function renderSkills() {
+  skillsList.innerHTML = "";
+  skills.forEach(s => {
+    const locked = data.unlockedSkill < s.unlock;
+    const card = document.createElement("article");
+    card.className = locked ? "skill locked card" : "skill card";
+    if (locked) card.setAttribute("aria-disabled", "true");
+
+    const h = document.createElement("h3");
+    h.textContent = s.name;
+    card.appendChild(h);
+
+    const fig = document.createElement("figure");
+    fig.className = "exercise";
+
+    const video = document.createElement("video");
+    video.setAttribute("controls", "");
+    video.setAttribute("preload", "metadata");
+    video.dataset.src = s.video;
+    video.poster = svgDataURL(s.name);
+    video.setAttribute("aria-label", s.name + " video");
+    fig.appendChild(video);
+    io.observe(video);
+
+    const cap = document.createElement("figcaption");
+    cap.textContent = locked ? `Deblocare nivel ${s.unlock}` : `Deblocat la nivel ${s.unlock}`;
+    fig.appendChild(cap);
+
+    card.appendChild(fig);
+    skillsList.appendChild(card);
+  });
+}
+
+/* =========================
+   Render Stats & Coach
+   ========================= */
+function renderStats() {
+  document.getElementById("doneDays").innerText = Math.max(0, data.unlockedDay - 1);
+  document.getElementById("streak").innerText = data.streak;
+  document.getElementById("bestStreak").innerText = data.best;
+}
+function renderCoach() {
+  const msgs = [
+    "Bun început, concentrează-te pe formă.",
+    "Consistență e cheia!",
+    "🔥 Nivel avansat, nu forța recuperarea.",
+    "Nivel expert, menține postura!"
+  ];
+  const idx = Math.min(Math.floor((data.unlockedDay - 1) / 7), msgs.length - 1);
+  document.getElementById("coach").innerText = msgs[idx];
+}
+
+/* =========================
+   Media manager (global pushup fallback)
+   ========================= */
+const pushupUrlInput = document.getElementById("pushupUrl");
+const btnAddPushupUrl = document.getElementById("btnAddPushupUrl");
+const btnClearPushupUrl = document.getElementById("btnClearPushupUrl");
+const mediaStatus = document.getElementById("mediaStatus");
+
+btnAddPushupUrl.addEventListener("click", () => {
+  const url = pushupUrlInput.value.trim();
+  if (!url) { alert("Introdu un URL valid."); return; }
+  data.media.pushupUrl = url;
+  // update any exercise that still uses global fallback (optional)
+  // (nu suprascriem exercițiile deja personalizate)
+  save();
+  renderMediaStatus();
+  renderAll();
+});
+
+btnClearPushupUrl.addEventListener("click", () => {
+  if (!data.media.pushupUrl) return;
+  if (!confirm("Ștergi URL-ul push-up salvat?")) return;
+  data.media.pushupUrl = null;
+  save();
+  renderMediaStatus();
+  renderAll();
+});
+
+function renderMediaStatus(){
+  mediaStatus.innerHTML = "";
+  const items = [];
+  if (data.media.pushupUrl) items.push({ label: "URL salvat (persistent)", src: data.media.pushupUrl });
+  items.push({ label: "Implicit din proiect", src: "videos/pushup.mp4" });
+  items.forEach(it => {
+    const div = document.createElement("div");
+    div.className = "media-item";
+    div.textContent = `${it.label}: ${it.src}`;
+    mediaStatus.appendChild(div);
+  });
+}
+
+/* =========================
+   Navigare, tema, init
+   ========================= */
+function showSection(id) {
+  ["days", "skills", "stats"].forEach(s => document.getElementById(s).classList.add("hidden"));
+  document.getElementById(id).classList.remove("hidden");
+  ["btnDays","btnSkills","btnStats"].forEach(bid => {
+    const btn = document.getElementById(bid);
+    if (!btn) return;
+    btn.classList.remove("active");
+    btn.setAttribute("aria-pressed", "false");
+  });
+  const btnId = "btn" + id.charAt(0).toUpperCase() + id.slice(1);
+  const targetBtn = document.getElementById(btnId);
+  if (targetBtn) { targetBtn.classList.add("active"); targetBtn.setAttribute("aria-pressed", "true"); targetBtn.focus(); }
+}
+
+const btnTheme = document.getElementById("btnTheme");
+btnTheme.addEventListener("click", () => {
+  document.body.classList.toggle("dark");
+  data.theme = document.body.classList.contains("dark") ? "dark" : "light";
+  btnTheme.setAttribute("aria-pressed", data.theme === "dark");
+  save();
+});
+
+document.querySelectorAll('nav [data-target]').forEach(btn => {
+  btn.addEventListener('click', () => showSection(btn.dataset.target));
+  btn.addEventListener('keydown', (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); btn.click(); } });
+});
+
+/* =========================
+   Render all & init
+   ========================= */
+function renderAll() {
+  renderDays();
+  renderSkills();
+  renderStats();
+  renderCoach();
+  renderMediaStatus();
+}
+renderAll();
+</script>
+
+</body>
+</html>
